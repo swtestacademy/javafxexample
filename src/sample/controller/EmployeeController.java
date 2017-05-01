@@ -2,6 +2,7 @@ package sample.controller;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.control.TableColumn;
@@ -13,6 +14,9 @@ import sample.model.EmployeeDAO;
 
 import java.sql.Date;
 import java.sql.SQLException;
+import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 /**
  * Created by ONUR BASKIRT on 23.02.2016.
@@ -46,6 +50,41 @@ public class EmployeeController {
     @FXML
     private TableColumn<Employee, Date> empHireDateColumn;
 
+    //For MultiThreading
+    private Executor exec;
+
+    //Initializing the controller class.
+    //This method is automatically called after the fxml file has been loaded.
+
+    @FXML
+    private void initialize () {
+        /*
+        The setCellValueFactory(...) that we set on the table columns are used to determine
+        which field inside the Employee objects should be used for the particular column.
+        The arrow -> indicates that we're using a Java 8 feature called Lambdas.
+        (Another option would be to use a PropertyValueFactory, but this is not type-safe
+
+        We're only using StringProperty values for our table columns in this example.
+        When you want to use IntegerProperty or DoubleProperty, the setCellValueFactory(...)
+        must have an additional asObject():
+        */
+
+        //For multithreading: Create executor that uses daemon threads:
+        exec = Executors.newCachedThreadPool((runnable) -> {
+            Thread t = new Thread (runnable);
+            t.setDaemon(true);
+            return t;
+        });
+
+        empIdColumn.setCellValueFactory(cellData -> cellData.getValue().employeeIdProperty().asObject());
+        empNameColumn.setCellValueFactory(cellData -> cellData.getValue().firstNameProperty());
+        empLastNameColumn.setCellValueFactory(cellData -> cellData.getValue().lastNameProperty());
+        empEmailColumn.setCellValueFactory(cellData -> cellData.getValue().emailProperty());
+        empPhoneNumberColumn.setCellValueFactory(cellData -> cellData.getValue().phoneNumberProperty());
+        empHireDateColumn.setCellValueFactory(cellData -> cellData.getValue().hireDateProperty());
+    }
+
+
     //Search an employee
     @FXML
     private void searchEmployee (ActionEvent actionEvent) throws ClassNotFoundException, SQLException {
@@ -75,26 +114,18 @@ public class EmployeeController {
         }
     }
 
-    //Initializing the controller class.
-    //This method is automatically called after the fxml file has been loaded.
-    @FXML
-    private void initialize () {
-        /*
-        The setCellValueFactory(...) that we set on the table columns are used to determine
-        which field inside the Employee objects should be used for the particular column.
-        The arrow -> indicates that we're using a Java 8 feature called Lambdas.
-        (Another option would be to use a PropertyValueFactory, but this is not type-safe
+    //Populate Employees for TableView with MultiThreading (This is for example usage)
+    private void fillEmployeeTable(ActionEvent event) throws SQLException, ClassNotFoundException {
+        Task<List<Employee>> task = new Task<List<Employee>>(){
+            @Override
+            public ObservableList<Employee> call() throws Exception{
+                return EmployeeDAO.searchEmployees();
+            }
+        };
 
-        We're only using StringProperty values for our table columns in this example.
-        When you want to use IntegerProperty or DoubleProperty, the setCellValueFactory(...)
-        must have an additional asObject():
-        */
-        empIdColumn.setCellValueFactory(cellData -> cellData.getValue().employeeIdProperty().asObject());
-        empNameColumn.setCellValueFactory(cellData -> cellData.getValue().firstNameProperty());
-        empLastNameColumn.setCellValueFactory(cellData -> cellData.getValue().lastNameProperty());
-        empEmailColumn.setCellValueFactory(cellData -> cellData.getValue().emailProperty());
-        empPhoneNumberColumn.setCellValueFactory(cellData -> cellData.getValue().phoneNumberProperty());
-        empHireDateColumn.setCellValueFactory(cellData -> cellData.getValue().hireDateProperty());
+        task.setOnFailed(e-> task.getException().printStackTrace());
+        task.setOnSucceeded(e-> employeeTable.setItems((ObservableList<Employee>) task.getValue()));
+        exec.execute(task);
     }
 
     //Populate Employee
@@ -167,5 +198,4 @@ public class EmployeeController {
             throw e;
         }
     }
-
 }
